@@ -6,8 +6,12 @@ from pathlib import Path
 class KMeansRunner:
     """Handles execution of the C kmeans clustering executable"""
     
-    def __init__(self, c_executable_path="./c_core/src/kmeans"):
-        self.executable_path = c_executable_path
+    def __init__(self):
+        base_dir = Path(__file__).resolve().parent  # backend/services/
+
+        project_root = base_dir.parent.parent       # go to root
+
+        self.executable_path = project_root / "c_core" / "src" / "kmeans"
         
     def run_clustering(self, input_file, output_file, k=3, max_iterations=100, num_threads=4):
         """
