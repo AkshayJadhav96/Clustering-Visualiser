@@ -69,47 +69,47 @@ void free_dataset(Dataset *data) {
     free(data);
 }
 
-void print_json_output(float ***history, int iterations, int k, int dim, int *labels, int n_points) {
+void write_json_output(FILE* fp,float ***history, int iterations, int k, int dim, int *labels, int n_points){
 
-    printf("{\n");
-    printf("\"status\": \"success\",\n");
-    printf("\"iterations\": %d,\n", iterations);
+    fprintf(fp,"{\n");
+    fprintf(fp,"\"status\": \"success\",\n");
+    fprintf(fp,"\"iterations\": %d,\n", iterations);
 
     // 🔹 History
-    printf("\"history\": [\n");
+    fprintf(fp,"\"history\": [\n");
 
     for (int iter = 0; iter < iterations; iter++) {
-        printf("  { \"centroids\": [");
+        fprintf(fp,"  { \"centroids\": [");
 
         for (int j = 0; j < k; j++) {
-            printf("[");
+            fprintf(fp,"[");
 
             for (int d = 0; d < dim; d++) {
-                printf("%.6f", history[iter][j][d]);
-                if (d < dim - 1) printf(",");
+                fprintf(fp,"%.6f", history[iter][j][d]);
+                if (d < dim - 1) fprintf(fp,",");
             }
 
-            printf("]");
-            if (j < k - 1) printf(",");
+            fprintf(fp,"]");
+            if (j < k - 1) fprintf(fp,",");
         }
 
-        printf("] }");
+        fprintf(fp,"] }");
 
-        if (iter < iterations - 1) printf(",");
-        printf("\n");
+        if (iter < iterations - 1) fprintf(fp,",");
+        fprintf(fp,"\n");
     }
 
-    printf("],\n");
+    fprintf(fp,"],\n");
 
     // 🔹 Final clusters
-    printf("\"final_clusters\": [");
+    fprintf(fp,"\"final_clusters\": [");
 
     for (int i = 0; i < n_points; i++) {
-        printf("%d", labels[i]);
-        if (i < n_points - 1) printf(",");
+        fprintf(fp,"%d", labels[i]);
+        if (i < n_points - 1) fprintf(fp,",");
     }
 
-    printf("]\n");
+    fprintf(fp,"]\n");
 
-    printf("}\n");
+    fprintf(fp,"}\n");
 }
