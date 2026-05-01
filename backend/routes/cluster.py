@@ -74,7 +74,8 @@ def run_clustering():
     {
         "filename": "uploaded_filename.csv",
         "k": 3,
-        "max_iterations": 100
+        "max_iterations": 100,
+        "threads": 4
     }
     
     Returns:
@@ -89,16 +90,20 @@ def run_clustering():
         filename = data['filename']
         k = data.get('k', 3)
         max_iterations = data.get('max_iterations', 100)
+        num_threads = data.get('threads',4)
         
         # Validate parameters
         try:
             k = int(k)
             max_iterations = int(max_iterations)
-            
+            num_threads = int(num_threads)
+
             if k < 1:
                 return jsonify({"error": "k must be positive"}), 400
             if max_iterations < 1:
                 return jsonify({"error": "max_iterations must be positive"}), 400
+            if num_threads < 1:
+                return jsonify({"error": "num_threads must be positive"}), 400
         except (ValueError, TypeError):
             return jsonify({"error": "k and max_iterations must be integers"}), 400
         
@@ -118,7 +123,8 @@ def run_clustering():
             input_file, 
             output_file, 
             k, 
-            max_iterations
+            max_iterations,
+            num_threads
         )
         
         if not exec_result['success']:

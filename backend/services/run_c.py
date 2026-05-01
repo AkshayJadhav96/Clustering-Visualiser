@@ -6,10 +6,10 @@ from pathlib import Path
 class KMeansRunner:
     """Handles execution of the C kmeans clustering executable"""
     
-    def __init__(self, c_executable_path="./c_core/bin/kmeans"):
+    def __init__(self, c_executable_path="./c_core/src/kmeans"):
         self.executable_path = c_executable_path
         
-    def run_clustering(self, input_file, output_file, k=3, max_iterations=100):
+    def run_clustering(self, input_file, output_file, k=3, max_iterations=100, num_threads=4):
         """
         Execute the C kmeans executable with given parameters
         
@@ -27,7 +27,7 @@ class KMeansRunner:
             if not os.path.exists(self.executable_path):
                 return {
                     "success": False,
-                    "error": f"Executable not found at {self.executable_path}"
+                    "error": f"Executable not found at {self.executable_path}" 
                 }
             
             # Check if input file exists
@@ -43,7 +43,8 @@ class KMeansRunner:
                 input_file,
                 output_file,
                 str(k),
-                str(max_iterations)
+                str(max_iterations),
+                str(num_threads)
             ]
             
             # Execute the C program
