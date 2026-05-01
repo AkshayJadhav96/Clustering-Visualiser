@@ -1,0 +1,14 @@
+#ifndef IO_H
+#define IO_H
+
+typedef struct {
+    int n_points;
+    int dim;
+    float **points;
+} Dataset;
+
+Dataset* read_csv(const char *filename);
+void free_dataset(Dataset *data);
+void print_json_output(float ***history, int iterations, int k, int dim, int *labels, int n_points);
+
+#endif
