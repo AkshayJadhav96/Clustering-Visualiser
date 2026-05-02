@@ -1,7 +1,29 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include "io.h"
+
+// Helper to check if a string represents a number
+int is_numeric(const char *str) {
+    while (*str && isspace(*str)) str++; // Skip whitespace
+    if (*str == '-' || *str == '+') str++;
+    if (!*str) return 0;
+    
+    int dot_seen = 0;
+    while (*str) {
+        if (*str == '.') {
+            if (dot_seen) return 0;
+            dot_seen = 1;
+        } else if (!isdigit(*str)) {
+            // Check if it's just the newline at the end
+            if (*str == '\r' || *str == '\n') break;
+            return 0; 
+        }
+        str++;
+    }
+    return 1;
+}
 
 // Count number of columns in first row
 int count_columns(char *line) {
@@ -22,13 +44,23 @@ Dataset* read_csv(const char *filename) {
     char buffer[1024];
     int n_points = 0;
     int dim = 0;
+    int has_header = 0;
 
     // -------- PASS 1: Count rows and columns --------
     while (fgets(buffer, sizeof(buffer), fp)) {
         if (n_points == 0) {
             dim = count_columns(buffer);
+            // Peek at the first token to see if it's numeric
+            char *temp_line = strdup(buffer);
+            char *first_token = strtok(temp_line, ",");
+            if (first_token && !is_numeric(first_token)) {
+                has_header = 1;
+            } else {
+                n_points++; // It was data, count it
+            }
+            free(temp_line);
         }
-        n_points++;
+        else n_points++;
     }
 
     rewind(fp);
@@ -45,6 +77,9 @@ Dataset* read_csv(const char *filename) {
 
     // -------- PASS 2: Parse values --------
     int i = 0;
+    if(has_header==1){
+        fgets(buffer,sizeof(buffer),fp);
+    }
     while (fgets(buffer, sizeof(buffer), fp)) {
         char *token = strtok(buffer, ",");
 
