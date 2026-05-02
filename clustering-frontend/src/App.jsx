@@ -1,11 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
+import Header from './components/Header';
 import ControlPanel from './components/ControlPanel';
-import ClusterPlot from './components/ClusterPlot';
-import PlaybackControls from './components/PlaybackControls';
-import ResultSummary from './components/ResultSummary';
+import Visualization from './components/Visualization';
+import AnimationControls from './components/AnimationControls';
 import { useClusterApi } from './hooks/useClusterApi';
 import { parseNumericCsv2D } from './utils/csv';
-import './App.css';
 
 const ANIM_MS = 550;
 
@@ -17,9 +16,11 @@ function App() {
   const [result, setResult] = useState(null);
   const [step, setStep] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [localError, setLocalError] = useState(null);
 
   const displayError = localError || error;
+  const stepIntervalMs = ANIM_MS / playbackSpeed;
 
   useEffect(() => {
     if (!isPlaying || !result?.history?.length) return;
@@ -32,9 +33,32 @@ function App() {
 
     const timer = setTimeout(() => {
       setStep((s) => s + 1);
-    }, ANIM_MS);
+    }, stepIntervalMs);
     return () => clearTimeout(timer);
-  }, [isPlaying, step, result]);
+  }, [isPlaying, step, result, stepIntervalMs]);
+
+  const handleStepChange = useCallback((next) => {
+    setIsPlaying(false);
+    setStep(next);
+  }, []);
+
+  const handleTogglePlay = useCallback(() => {
+    if (isPlaying) {
+      setIsPlaying(false);
+      return;
+    }
+    const hist = result?.history;
+    const last = hist?.length ? hist.length - 1 : 0;
+    if (last >= 0 && step >= last) {
+      setStep(0);
+    }
+    setIsPlaying(true);
+  }, [isPlaying, result, step]);
+
+  const handleResetPlayback = useCallback(() => {
+    setIsPlaying(false);
+    setStep(0);
+  }, []);
 
   const onFileSelected = useCallback(
     async (file) => {
@@ -117,14 +141,8 @@ function App() {
   const maxStep = history.length > 0 ? history.length - 1 : 0;
 
   return (
-    <div className="app">
-      <header className="app-header">
-        <span className="eyebrow">Clustering visualiser</span>
-        <h1>Watch K-means settle in 2D</h1>
-        <p className="tagline">
-          Native C engine, Flask API, and a live scatter plot from your CSV’s first two columns.
-        </p>
-      </header>
+    <div className="kv-page">
+      <Header />
 
       <ControlPanel
         onFileSelected={onFileSelected}
@@ -136,26 +154,26 @@ function App() {
         pointCount={rawPoints.length}
       />
 
-      {result && (
-        <>
-          <PlaybackControls
-            step={step}
-            maxStep={maxStep}
-            onStepChange={setStep}
-            isPlaying={isPlaying}
-            onTogglePlay={() => setIsPlaying((p) => !p)}
-          />
-          <div className="viz-row">
-            <ClusterPlot
-              basePoints={rawPoints}
-              history={history}
-              currentStep={step}
-              finalClusters={result.final_clusters}
-            />
-            <ResultSummary result={result} />
-          </div>
-        </>
-      )}
+      <Visualization
+        basePoints={rawPoints}
+        result={result}
+        currentStep={step}
+        isPlaying={isPlaying}
+        transitionMs={stepIntervalMs}
+      />
+
+      {result ? (
+        <AnimationControls
+          step={step}
+          maxStep={maxStep}
+          onStepChange={handleStepChange}
+          isPlaying={isPlaying}
+          onTogglePlay={handleTogglePlay}
+          onReset={handleResetPlayback}
+          playbackSpeed={playbackSpeed}
+          onPlaybackSpeedChange={setPlaybackSpeed}
+        />
+      ) : null}
     </div>
   );
 }

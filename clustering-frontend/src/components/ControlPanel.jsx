@@ -37,91 +37,96 @@ export default function ControlPanel({
   };
 
   return (
-    <div className="control-panel">
-      <div className="panel-card">
-        <h2 className="section-title">Dataset</h2>
-        <p className="hint">Drop a numeric CSV. The first two columns become your x and y axes.</p>
-        <label
-          className={`file-drop${dragOver ? ' file-drop--active' : ''}`}
-          onDragEnter={(e) => {
-            e.preventDefault();
-            setDragOver(true);
-          }}
-          onDragOver={(e) => {
-            e.preventDefault();
-            setDragOver(true);
-          }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={(e) => {
-            e.preventDefault();
-            setDragOver(false);
-            const f = pickCsvFile(e.dataTransfer?.files);
-            if (f) onFileSelected(f);
-          }}
-        >
-          <input
-            type="file"
-            accept=".csv,text/csv"
-            disabled={loading}
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) onFileSelected(f);
-              e.target.value = '';
-            }}
-          />
-          <span className="file-drop__text">Choose file or drag here</span>
-          <span className="file-drop__sub">.csv — validated on the server</span>
-        </label>
-        {uploadMeta && (
-          <p className="meta">
-            <code>{uploadMeta.filename}</code>
-            <br />
-            {uploadMeta.rows} rows × {uploadMeta.columns} columns
-            {pointCount > 0 ? ` · ${pointCount} points in the chart` : null}
+    <section className="kv-control-card">
+      <div className="kv-control-grid">
+        <div>
+          <h2 className="kv-section-label">Dataset</h2>
+          <p className="kv-section-hint">
+            Upload a numeric CSV. The first two columns map to the x and y axes.
           </p>
-        )}
-      </div>
-
-      <div className="panel-card">
-        <h2 className="section-title">Parameters</h2>
-        <div className="field-row">
-          <label>
-            Clusters (k)
+          <label
+            className={`kv-dropzone${dragOver ? ' kv-dropzone--active' : ''}`}
+            onDragEnter={(e) => {
+              e.preventDefault();
+              setDragOver(true);
+            }}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragOver(true);
+            }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragOver(false);
+              const f = pickCsvFile(e.dataTransfer?.files);
+              if (f) onFileSelected(f);
+            }}
+          >
             <input
-              type="number"
-              min={1}
-              value={params.k}
-              onChange={update('k')}
+              type="file"
+              accept=".csv,text/csv"
               disabled={loading}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) onFileSelected(f);
+                e.target.value = '';
+              }}
             />
+            <span className="kv-dropzone__title">Drop a file here or click to browse</span>
+            <span className="kv-dropzone__sub">CSV · validated on the server</span>
           </label>
-          <label>
-            Max iterations
-            <input
-              type="number"
-              min={1}
-              value={params.max_iterations}
-              onChange={update('max_iterations')}
-              disabled={loading}
-            />
-          </label>
-          <label>
-            Threads
-            <input
-              type="number"
-              min={1}
-              value={params.threads}
-              onChange={update('threads')}
-              disabled={loading}
-            />
-          </label>
+          {uploadMeta && (
+            <p className="kv-meta">
+              <code>{uploadMeta.filename}</code>
+              <br />
+              {uploadMeta.rows} rows × {uploadMeta.columns} columns
+              {pointCount > 0 ? ` · ${pointCount} points plotted` : null}
+            </p>
+          )}
         </div>
-        <button type="button" className="btn-primary" onClick={handleRun} disabled={loading || !canRun}>
-          {loading ? 'Running…' : 'Run K-means'}
-        </button>
-      </div>
 
-      {error && <p className="error-banner">{error}</p>}
-    </div>
+        <div>
+          <h2 className="kv-section-label">Parameters</h2>
+          <p className="kv-section-hint">Tune the engine, then launch a run.</p>
+          <div className="kv-fields">
+            <label>
+              k (clusters)
+              <input
+                type="number"
+                min={1}
+                value={params.k}
+                onChange={update('k')}
+                disabled={loading}
+              />
+            </label>
+            <label>
+              Max iterations
+              <input
+                type="number"
+                min={1}
+                value={params.max_iterations}
+                onChange={update('max_iterations')}
+                disabled={loading}
+              />
+            </label>
+            <label>
+              Threads
+              <input
+                type="number"
+                min={1}
+                value={params.threads}
+                onChange={update('threads')}
+                disabled={loading}
+              />
+            </label>
+          </div>
+          <button type="button" className="kv-btn-run" onClick={handleRun} disabled={loading || !canRun}>
+            {loading ? 'Running…' : 'Run K-Means'}
+          </button>
+        </div>
+
+        {error ? <p className="kv-error">{error}</p> : null}
+      </div>
+    </section>
   );
 }
