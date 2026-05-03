@@ -7,6 +7,12 @@ import {
 } from '../utils/clusterViz';
 import { useCentroidInterpolation } from '../hooks/useCentroidInterpolation';
 
+function pickOtherIndex(preferred, avoid, n) {
+  if (n < 2) return 0;
+  if (preferred !== avoid) return preferred;
+  return preferred === 0 ? 1 : 0;
+}
+
 const MARGIN = { top: 22, right: 26, bottom: 36, left: 54 };
 const CHART_BG = '#fafbff';
 const GRID_STROKE = 'rgba(15, 23, 42, 0.06)';
@@ -39,7 +45,8 @@ function formatTick(n) {
 }
 
 export default function Visualization({
-  basePoints,
+  dataRows,
+  columnNames,
   result,
   currentStep,
   isPlaying,
@@ -47,6 +54,16 @@ export default function Visualization({
 }) {
   const history = useMemo(() => result?.history ?? [], [result]);
   const finalClusters = result?.final_clusters;
+  const nFeatures = columnNames.length;
+
+  const [vizX, setVizX] = useState(0);
+  const [vizY, setVizY] = useState(1);
+
+  useEffect(() => {
+    if (nFeatures < 2) return;
+    setVizX(0);
+    setVizY(Math.min(1, nFeatures - 1));
+  }, [nFeatures]);
 
   const wrapRef = useRef(null);
   const canvasRef = useRef(null);
@@ -54,21 +71,24 @@ export default function Visualization({
   const drawRef = useRef(() => {});
 
   const clusterIds = useMemo(() => {
-    if (!basePoints.length || !history.length) return [];
-    return clusterIdsForStep(basePoints, history, currentStep, finalClusters);
-  }, [basePoints, history, currentStep, finalClusters]);
+    if (!dataRows.length || !history.length) return [];
+    return clusterIdsForStep(dataRows, history, currentStep, finalClusters);
+  }, [dataRows, history, currentStep, finalClusters]);
 
   const bounds = useMemo(
-    () => computePlotBounds(basePoints, history),
-    [basePoints, history],
+    () => computePlotBounds(dataRows, history, vizX, vizY),
+    [dataRows, history, vizX, vizY],
   );
+
+  const xLabel = columnNames[vizX] ?? 'X';
+  const yLabel = columnNames[vizY] ?? 'Y';
 
   const [hover, setHover] = useState(null);
   const hoverIndexRef = useRef(-1);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !basePoints.length || !clusterIds.length) return;
+    if (!canvas || !dataRows.length || !clusterIds.length) return;
 
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const rect = canvas.getBoundingClientRect();
@@ -146,12 +166,14 @@ export default function Visualization({
     if (cents?.length) {
       ctx.lineWidth = LINE_WIDTH;
       ctx.lineCap = 'round';
-      for (let i = 0; i < basePoints.length; i++) {
-        const p = basePoints[i];
+      for (let i = 0; i < dataRows.length; i++) {
+        const row = dataRows[i];
+        const pxVal = row[vizX];
+        const pyVal = row[vizY];
         const cid = clusterIds[i];
         const c = cents[cid];
         if (!c) continue;
-        const [px0, py0] = dataToPixel(p.x, p.y, bounds, plotW, plotH, MARGIN);
+        const [px0, py0] = dataToPixel(pxVal, pyVal, bounds, plotW, plotH, MARGIN);
         const [px1, py1] = dataToPixel(c[0], c[1], bounds, plotW, plotH, MARGIN);
         ctx.strokeStyle = clusterColorWithAlpha(cid, LINE_ALPHA);
         ctx.beginPath();
@@ -161,10 +183,10 @@ export default function Visualization({
       }
     }
 
-    for (let i = 0; i < basePoints.length; i++) {
-      const p = basePoints[i];
+    for (let i = 0; i < dataRows.length; i++) {
+      const row = dataRows[i];
       const cid = clusterIds[i];
-      const [px, py] = dataToPixel(p.x, p.y, bounds, plotW, plotH, MARGIN);
+      const [px, py] = dataToPixel(row[vizX], row[vizY], bounds, plotW, plotH, MARGIN);
       ctx.fillStyle = clusterColorWithAlpha(cid, POINT_OPACITY);
       ctx.beginPath();
       ctx.arc(px, py, POINT_RADIUS, 0, Math.PI * 2);
@@ -198,7 +220,7 @@ export default function Visualization({
         ctx.stroke();
       }
     }
-  }, [basePoints, clusterIds, bounds]);
+  }, [dataRows, vizX, vizY, clusterIds, bounds]);
 
   useLayoutEffect(() => {
     drawRef.current = draw;
@@ -211,6 +233,8 @@ export default function Visualization({
     transitionMs,
     displayCentroidsRef,
     drawRef,
+    xFeatureIndex: vizX,
+    yFeatureIndex: vizY,
   });
 
   useEffect(() => {
@@ -230,7 +254,7 @@ export default function Visualization({
   const onMouseMove = useCallback(
     (e) => {
       const canvas = canvasRef.current;
-      if (!canvas || !basePoints.length) return;
+      if (!canvas || !dataRows.length) return;
       const rect = canvas.getBoundingClientRect();
       const mx = e.clientX - rect.left;
       const my = e.clientY - rect.top;
@@ -240,9 +264,9 @@ export default function Visualization({
 
       let best = -1;
       let bestD = HOVER_PX * HOVER_PX;
-      for (let i = 0; i < basePoints.length; i++) {
-        const p = basePoints[i];
-        const [px, py] = dataToPixel(p.x, p.y, bounds, plotW, plotH, MARGIN);
+      for (let i = 0; i < dataRows.length; i++) {
+        const row = dataRows[i];
+        const [px, py] = dataToPixel(row[vizX], row[vizY], bounds, plotW, plotH, MARGIN);
         const dx = px - mx;
         const dy = py - my;
         const d = dx * dx + dy * dy;
@@ -265,16 +289,16 @@ export default function Visualization({
         return;
       }
       hoverIndexRef.current = best;
-      const p = basePoints[best];
+      const row = dataRows[best];
       setHover({
         clientX: e.clientX,
         clientY: e.clientY,
-        x: p.x,
-        y: p.y,
+        x: row[vizX],
+        y: row[vizY],
         cluster: clusterIds[best],
       });
     },
-    [basePoints, bounds, clusterIds],
+    [dataRows, vizX, vizY, bounds, clusterIds],
   );
 
   const onMouseLeave = useCallback(() => {
@@ -286,7 +310,7 @@ export default function Visualization({
   const nPoints = Array.isArray(finalClusters) ? finalClusters.length : null;
   const activeClusters = history[currentStep]?.centroids?.length ?? null;
 
-  const showChart = result && history.length > 0 && basePoints.length > 0;
+  const showChart = result && history.length > 0 && dataRows.length > 0 && nFeatures >= 2;
 
   return (
     <section className="kv-viz-card">
@@ -302,6 +326,49 @@ export default function Visualization({
           <span className="kv-step-pill">Iteration {currentStep + 1}</span>
         ) : null}
       </div>
+
+      {showChart ? (
+        <div className="kv-viz-features" aria-label="Plot axes">
+          <label className="kv-viz-feature">
+            <span className="kv-viz-feature__label">X axis</span>
+            <select
+              value={vizX}
+              onChange={(e) => {
+                const next = Number(e.target.value);
+                setVizX(next);
+                if (next === vizY && nFeatures > 1) {
+                  setVizY(pickOtherIndex(vizY, next, nFeatures));
+                }
+              }}
+            >
+              {columnNames.map((name, idx) => (
+                <option key={`x-${name}-${idx}`} value={idx}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="kv-viz-feature">
+            <span className="kv-viz-feature__label">Y axis</span>
+            <select
+              value={vizY}
+              onChange={(e) => {
+                const next = Number(e.target.value);
+                setVizY(next);
+                if (next === vizX && nFeatures > 1) {
+                  setVizX(pickOtherIndex(vizX, next, nFeatures));
+                }
+              }}
+            >
+              {columnNames.map((name, idx) => (
+                <option key={`y-${name}-${idx}`} value={idx}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      ) : null}
 
       {showChart ? (
         <>
@@ -320,7 +387,7 @@ export default function Visualization({
                 role="status"
               >
                 <span>
-                  ({hover.x.toFixed(3)}, {hover.y.toFixed(3)})
+                  {xLabel}: {hover.x.toFixed(3)} · {yLabel}: {hover.y.toFixed(3)}
                 </span>
                 <span>Cluster {hover.cluster}</span>
               </div>
@@ -354,7 +421,7 @@ export default function Visualization({
       ) : (
         <div className="kv-canvas-wrap">
           <p className="kv-viz-empty">
-            {basePoints.length
+            {dataRows.length
               ? 'Run K-Means to render your dataset and animate how centroids settle.'
               : 'Upload a CSV in the control panel, then run K-Means to see the visualization here.'}
           </p>

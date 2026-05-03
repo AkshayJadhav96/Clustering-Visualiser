@@ -22,7 +22,10 @@ export function clusterColorWithAlpha(id, alpha) {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
-export function computePlotBounds(basePoints, history, padFraction = 0.07) {
+/**
+ * Axis-aligned 2D projection: plot column xIdx vs yIdx (same units as k-means space).
+ */
+export function computePlotBounds(dataRows, history, xIdx, yIdx, padFraction = 0.07) {
   let minX = Infinity;
   let maxX = -Infinity;
   let minY = Infinity;
@@ -35,15 +38,16 @@ export function computePlotBounds(basePoints, history, padFraction = 0.07) {
     if (y > maxY) maxY = y;
   };
 
-  for (let i = 0; i < basePoints.length; i++) {
-    bump(basePoints[i].x, basePoints[i].y);
+  for (let i = 0; i < dataRows.length; i++) {
+    const row = dataRows[i];
+    bump(row[xIdx], row[yIdx]);
   }
 
   for (let h = 0; h < history.length; h++) {
     const cents = history[h]?.centroids;
     if (!cents) continue;
     for (let j = 0; j < cents.length; j++) {
-      bump(cents[j][0], cents[j][1]);
+      bump(cents[j][xIdx], cents[j][yIdx]);
     }
   }
 
@@ -67,37 +71,44 @@ export function computePlotBounds(basePoints, history, padFraction = 0.07) {
   };
 }
 
-function nearestCentroidId(x, y, centroids) {
+function nearestCentroidIdFull(pointRow, centroids) {
+  const dim = centroids[0].length;
   let best = 0;
   let bestD = Infinity;
   for (let j = 0; j < centroids.length; j++) {
     const c = centroids[j];
-    const dx = x - c[0];
-    const dy = y - c[1];
-    const d = dx * dx + dy * dy;
-    if (d < bestD) {
-      bestD = d;
+    let sum = 0;
+    for (let d = 0; d < dim; d++) {
+      const t = pointRow[d] - c[d];
+      sum += t * t;
+    }
+    if (sum < bestD) {
+      bestD = sum;
       best = j;
     }
   }
   return best;
 }
 
-export function clusterIdsForStep(points2d, history, step, finalClusters) {
+/**
+ * Cluster assignment for each step: matches the backend (full-dimensional distance).
+ * For the last step, uses backend labels when present.
+ */
+export function clusterIdsForStep(dataRows, history, step, finalClusters) {
   const centroids = history[step]?.centroids;
   if (!centroids?.length) {
-    return points2d.map(() => 0);
+    return dataRows.map(() => 0);
   }
 
   const lastStep = history.length - 1;
   const useBackend =
     step >= lastStep &&
     Array.isArray(finalClusters) &&
-    finalClusters.length === points2d.length;
+    finalClusters.length === dataRows.length;
 
   if (useBackend) {
     return finalClusters;
   }
 
-  return points2d.map((p) => nearestCentroidId(p.x, p.y, centroids));
+  return dataRows.map((row) => nearestCentroidIdFull(row, centroids));
 }

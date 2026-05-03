@@ -6,8 +6,9 @@ function easeInOutCubic(t) {
 }
 
 /**
- * Updates displayCentroidsRef (same length as centroids, each [x,y]) with smooth
+ * Updates displayCentroidsRef (same length as centroids, each [x,y] in **plot** space) with smooth
  * interpolation when playing and step advances by 1; otherwise snaps to history[currentStep].
+ * xFeatureIndex / yFeatureIndex pick which dimensions to draw (multi-column k-means).
  * Calls drawRef.current() after each centroid update.
  */
 export function useCentroidInterpolation({
@@ -17,13 +18,15 @@ export function useCentroidInterpolation({
   transitionMs,
   displayCentroidsRef,
   drawRef,
+  xFeatureIndex = 0,
+  yFeatureIndex = 1,
 }) {
   const prevHandledStepRef = useRef(null);
   const rafRef = useRef(0);
 
   useEffect(() => {
     prevHandledStepRef.current = null;
-  }, [history]);
+  }, [history, xFeatureIndex, yFeatureIndex]);
 
   useEffect(() => {
     const centroids = history[currentStep]?.centroids;
@@ -41,8 +44,10 @@ export function useCentroidInterpolation({
     const prev = prevHandledStepRef.current;
     const stepChanged = prev !== currentStep;
 
+    const project = (c) => [c[xFeatureIndex], c[yFeatureIndex]];
+
     if (prev === null) {
-      displayCentroidsRef.current = centroids.map((c) => [c[0], c[1]]);
+      displayCentroidsRef.current = centroids.map((c) => project(c));
       prevHandledStepRef.current = currentStep;
       draw();
       return () => cancelRaf();
@@ -61,7 +66,7 @@ export function useCentroidInterpolation({
       history[fromStep]?.centroids?.length === centroids.length;
 
     if (!shouldAnimate) {
-      displayCentroidsRef.current = centroids.map((c) => [c[0], c[1]]);
+      displayCentroidsRef.current = centroids.map((c) => project(c));
       draw();
       return () => cancelRaf();
     }
@@ -70,6 +75,8 @@ export function useCentroidInterpolation({
     const to = centroids;
     const n = to.length;
     const start = performance.now();
+    const xi = xFeatureIndex;
+    const yi = yFeatureIndex;
 
     const tick = (now) => {
       const t = Math.min(1, (now - start) / transitionMs);
@@ -78,7 +85,10 @@ export function useCentroidInterpolation({
       for (let i = 0; i < n; i++) {
         const fa = from[i];
         const tb = to[i];
-        out[i] = [fa[0] + (tb[0] - fa[0]) * e, fa[1] + (tb[1] - fa[1]) * e];
+        out[i] = [
+          fa[xi] + (tb[xi] - fa[xi]) * e,
+          fa[yi] + (tb[yi] - fa[yi]) * e,
+        ];
       }
       displayCentroidsRef.current = out;
       draw();
@@ -93,5 +103,14 @@ export function useCentroidInterpolation({
     rafRef.current = requestAnimationFrame(tick);
 
     return () => cancelRaf();
-  }, [history, currentStep, isPlaying, transitionMs, displayCentroidsRef, drawRef]);
+  }, [
+    history,
+    currentStep,
+    isPlaying,
+    transitionMs,
+    displayCentroidsRef,
+    drawRef,
+    xFeatureIndex,
+    yFeatureIndex,
+  ]);
 }

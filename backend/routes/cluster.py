@@ -4,11 +4,13 @@ from pathlib import Path
 
 from services.run_c import KMeansRunner
 from utils.file_handler import (
-    save_upload_file, 
-    get_output_path, 
+    save_upload_file,
+    get_output_path,
     read_json_output,
     validate_csv_file,
-    cleanup_file
+    cleanup_file,
+    build_clustering_csv,
+    UPLOAD_FOLDER,
 )
 
 # Create blueprint
@@ -53,13 +55,15 @@ def upload_file():
             cleanup_file(result['filepath'])
             return jsonify({"error": validation['error']}), 400
         
-        return jsonify({
+        payload = {
             "success": True,
             "filename": result['filename'],
             "rows": validation['rows'],
             "columns": validation['columns'],
-            "headers": validation['headers']
-        }), 200
+            "headers": validation['headers'],
+            "numeric_headers": validation['numeric_headers'],
+        }
+        return jsonify(payload), 200
         
     except Exception as e:
         return jsonify({"error": f"Upload failed: {str(e)}"}), 500
@@ -73,6 +77,7 @@ def run_clustering():
     Expected JSON:
     {
         "filename": "uploaded_filename.csv",
+        "clustering_columns": ["Age", "Annual Income (k$)", "Spending Score (1-100)"],
         "k": 3,
         "max_iterations": 100,
         "threads": 4
@@ -88,9 +93,15 @@ def run_clustering():
             return jsonify({"error": "Missing filename in request"}), 400
         
         filename = data['filename']
+        clustering_columns = data.get('clustering_columns')
         k = data.get('k', 3)
         max_iterations = data.get('max_iterations', 100)
-        num_threads = data.get('threads',4)
+        num_threads = data.get('threads', 4)
+
+        if not clustering_columns or not isinstance(clustering_columns, list):
+            return jsonify({"error": "Missing clustering_columns array"}), 400
+        if len(clustering_columns) < 2:
+            return jsonify({"error": "Select at least two columns for clustering"}), 400
         
         # Validate parameters
         try:
@@ -107,25 +118,32 @@ def run_clustering():
         except (ValueError, TypeError):
             return jsonify({"error": "k and max_iterations must be integers"}), 400
         
-        # Get input file path
-        from utils.file_handler import UPLOAD_FOLDER
         input_file = os.path.join(UPLOAD_FOLDER, filename)
-        
+
         if not os.path.exists(input_file):
             return jsonify({"error": f"File not found: {filename}"}), 404
-        
-        # Get output file path
+
         filename_base = os.path.splitext(filename)[0]
         output_file = get_output_path(filename_base)
-        
-        # Run clustering
-        exec_result = kmeans_runner.run_clustering(
-            input_file, 
-            output_file, 
-            k, 
-            max_iterations,
-            num_threads
-        )
+
+        numeric_input = os.path.join(UPLOAD_FOLDER, f"{filename_base}_kmeans_numeric.csv")
+        build_result = build_clustering_csv(input_file, numeric_input, clustering_columns)
+        if not build_result['success']:
+            return jsonify({"error": build_result['error']}), 400
+
+        try:
+            exec_result = kmeans_runner.run_clustering(
+                numeric_input,
+                output_file,
+                k,
+                max_iterations,
+                num_threads,
+            )
+        finally:
+            try:
+                os.remove(numeric_input)
+            except OSError:
+                pass
         
         if not exec_result['success']:
             return jsonify({"error": exec_result['error']}), 500

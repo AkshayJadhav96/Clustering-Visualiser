@@ -1,10 +1,10 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import Header from './components/Header';
 import ControlPanel from './components/ControlPanel';
 import Visualization from './components/Visualization';
 import AnimationControls from './components/AnimationControls';
 import { useClusterApi } from './hooks/useClusterApi';
-import { parseNumericCsv2D } from './utils/csv';
+import { analyzeClusteringCsv, subsetNumericColumns } from './utils/csv';
 
 const ANIM_MS = 550;
 
@@ -12,15 +12,33 @@ function App() {
   const { loading, error, upload, run, clearError } = useClusterApi();
   const [uploadMeta, setUploadMeta] = useState(null);
   const [filename, setFilename] = useState(null);
-  const [rawPoints, setRawPoints] = useState([]);
+  const [csvAnalysis, setCsvAnalysis] = useState(null);
+  const [selectedClusteringColumns, setSelectedClusteringColumns] = useState([]);
   const [result, setResult] = useState(null);
   const [step, setStep] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [localError, setLocalError] = useState(null);
 
+  const dataset = useMemo(() => {
+    if (!csvAnalysis?.availableNumericHeaders?.length) {
+      return { columnNames: [], rows: [] };
+    }
+    return subsetNumericColumns(
+      csvAnalysis.availableNumericHeaders,
+      csvAnalysis.fullNumericRows,
+      selectedClusteringColumns,
+    );
+  }, [csvAnalysis, selectedClusteringColumns]);
+
   const displayError = localError || error;
   const stepIntervalMs = ANIM_MS / playbackSpeed;
+
+  useEffect(() => {
+    setResult(null);
+    setStep(0);
+    setIsPlaying(false);
+  }, [selectedClusteringColumns]);
 
   useEffect(() => {
     if (!isPlaying || !result?.history?.length) return;
@@ -76,25 +94,29 @@ function App() {
         return;
       }
 
-      const pts = parseNumericCsv2D(text);
-      if (!pts.length) {
-        setLocalError('No valid numeric rows with at least two columns.');
-        setRawPoints([]);
+      const analysis = analyzeClusteringCsv(text);
+      if (!analysis.availableNumericHeaders.length || analysis.availableNumericHeaders.length < 2) {
+        setLocalError(
+          'No usable data: need a rectangular CSV with a header row, consistent columns, and at least two columns that are numeric on every row (text columns are listed separately).',
+        );
+        setCsvAnalysis(null);
+        setSelectedClusteringColumns([]);
         setUploadMeta(null);
         setFilename(null);
         return;
       }
-
-      setRawPoints(pts);
 
       const meta = await upload(file);
       if (!meta?.success) {
-        setRawPoints([]);
+        setCsvAnalysis(null);
+        setSelectedClusteringColumns([]);
         setUploadMeta(null);
         setFilename(null);
         return;
       }
 
+      setCsvAnalysis(analysis);
+      setSelectedClusteringColumns(analysis.availableNumericHeaders.slice());
       setUploadMeta(meta);
       setFilename(meta.filename);
     },
@@ -108,8 +130,14 @@ function App() {
       setLocalError(null);
       setIsPlaying(false);
 
+      if (selectedClusteringColumns.length < 2) {
+        setLocalError('Select at least two columns for clustering.');
+        return;
+      }
+
       const payload = {
         filename,
+        clustering_columns: selectedClusteringColumns,
         k: params.k,
         max_iterations: params.max_iterations,
         threads: params.threads,
@@ -124,9 +152,9 @@ function App() {
         return;
       }
 
-      if (data.final_clusters.length !== rawPoints.length) {
+      if (data.final_clusters.length !== dataset.rows.length) {
         setLocalError(
-          `Label count (${data.final_clusters.length}) does not match parsed points (${rawPoints.length}). Re-upload the CSV.`,
+          `Label count (${data.final_clusters.length}) does not match parsed rows (${dataset.rows.length}). Re-upload the CSV.`,
         );
         return;
       }
@@ -134,11 +162,15 @@ function App() {
       setResult(data);
       setStep(0);
     },
-    [filename, run, clearError, rawPoints.length],
+    [filename, run, clearError, dataset.rows.length, selectedClusteringColumns],
   );
 
   const history = result?.history ?? [];
   const maxStep = history.length > 0 ? history.length - 1 : 0;
+
+  const canRun =
+    Boolean(filename && csvAnalysis && dataset.rows.length > 0) &&
+    selectedClusteringColumns.length >= 2;
 
   return (
     <div className="kv-page">
@@ -148,14 +180,18 @@ function App() {
         onFileSelected={onFileSelected}
         onRun={onRun}
         loading={loading}
-        canRun={Boolean(filename && rawPoints.length)}
+        canRun={canRun}
         error={displayError}
         uploadMeta={uploadMeta}
-        pointCount={rawPoints.length}
+        pointCount={dataset.rows.length}
+        numericOptions={csvAnalysis?.availableNumericHeaders ?? []}
+        selectedClusteringColumns={selectedClusteringColumns}
+        onClusteringColumnsChange={setSelectedClusteringColumns}
       />
 
       <Visualization
-        basePoints={rawPoints}
+        dataRows={dataset.rows}
+        columnNames={dataset.columnNames}
         result={result}
         currentStep={step}
         isPlaying={isPlaying}
