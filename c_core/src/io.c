@@ -77,8 +77,17 @@ Dataset* read_csv(const char *filename) {
 
     // -------- PASS 2: Parse values --------
     int i = 0;
-    if(has_header==1){
-        fgets(buffer,sizeof(buffer),fp);
+    if (has_header == 1) {
+        if (fgets(buffer, sizeof(buffer), fp) == NULL) {
+            fclose(fp);
+            for (int r = 0; r < n_points; r++) {
+                free(data->points[r]);
+            }
+            free(data->points);
+            free(data);
+            fprintf(stderr, "read_csv: could not skip header line\n");
+            return NULL;
+        }
     }
     while (fgets(buffer, sizeof(buffer), fp)) {
         char *token = strtok(buffer, ",");
