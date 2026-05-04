@@ -12,6 +12,7 @@ class KMeansRunner:
         project_root = base_dir.parent.parent       # go to root
 
         self.executable_path = project_root / "c_core" / "src" / "kmeans"
+        self.elbow_executable_path = project_root / "c_core" / "src" / "elbow"
         
     def run_clustering(self, input_file, output_file, k=3, max_iterations=100, num_threads=4):
         """
@@ -89,3 +90,55 @@ class KMeansRunner:
                 "success": False,
                 "error": f"Unexpected error: {str(e)}"
             }
+
+    def run_elbow(self, input_file, output_file, k_max=10, max_iterations=100, num_threads=4):
+        """
+        Run elbow helper: WCSS for k = 1 .. k_max on the given numeric CSV.
+        """
+        try:
+            if not os.path.exists(self.elbow_executable_path):
+                return {
+                    "success": False,
+                    "error": f"Elbow executable not found at {self.elbow_executable_path}",
+                }
+
+            if not os.path.exists(input_file):
+                return {
+                    "success": False,
+                    "error": f"Input file not found: {input_file}",
+                }
+
+            cmd = [
+                str(self.elbow_executable_path),
+                input_file,
+                output_file,
+                str(k_max),
+                str(max_iterations),
+                str(num_threads),
+            ]
+
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=600,
+            )
+
+            if result.returncode != 0:
+                return {
+                    "success": False,
+                    "error": f"Elbow program failed: {result.stderr or result.stdout}",
+                }
+
+            if not os.path.exists(output_file):
+                return {
+                    "success": False,
+                    "error": f"Elbow output was not created: {output_file}",
+                }
+
+            return {"success": True, "output_file": output_file}
+
+        except subprocess.TimeoutExpired:
+            return {"success": False, "error": "Elbow process timed out"}
+        except Exception as e:
+            return {"success": False, "error": f"Unexpected error: {str(e)}"}

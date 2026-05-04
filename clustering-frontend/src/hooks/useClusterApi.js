@@ -38,7 +38,22 @@ export function useClusterApi() {
     }
   }, []);
 
+  const runElbow = useCallback(async (payload) => {
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await clusterApi.elbow(payload);
+      if (!res.ok) {
+        setError(res.error);
+        return null;
+      }
+      return res.data;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   const clearError = useCallback(() => setError(null), []);
 
-  return { loading, error, upload, run, clearError };
+  return { loading, error, upload, run, runElbow, clearError };
 }

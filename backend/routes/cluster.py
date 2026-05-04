@@ -1,11 +1,12 @@
 from flask import Blueprint, request, jsonify
 import os
-from pathlib import Path
+import json
 
 from services.run_c import KMeansRunner
 from utils.file_handler import (
     save_upload_file,
     get_output_path,
+    get_elbow_output_path,
     read_json_output,
     validate_csv_file,
     cleanup_file,
@@ -160,6 +161,113 @@ def run_clustering():
         
     except Exception as e:
         return jsonify({"error": f"Clustering failed: {str(e)}"}), 500
+
+
+@cluster_bp.route('/elbow', methods=['POST'])
+def run_elbow():
+    """
+    Elbow method: WCSS (inertia) for k = 1 .. k_max on the selected numeric columns.
+
+    JSON body:
+      filename, clustering_columns, k_max (optional, default 10),
+      max_iterations, threads
+    """
+    try:
+        data = request.get_json()
+
+        if not data or 'filename' not in data:
+            return jsonify({"error": "Missing filename in request"}), 400
+
+        filename = data['filename']
+        clustering_columns = data.get('clustering_columns')
+        k_max = data.get('k_max', 10)
+        max_iterations = data.get('max_iterations', 100)
+        num_threads = data.get('threads', 4)
+
+        if not clustering_columns or not isinstance(clustering_columns, list):
+            return jsonify({"error": "Missing clustering_columns array"}), 400
+        if len(clustering_columns) < 2:
+            return jsonify({"error": "Select at least two columns for clustering"}), 400
+
+        try:
+            k_max = int(k_max)
+            max_iterations = int(max_iterations)
+            num_threads = int(num_threads)
+            if k_max < 1:
+                return jsonify({"error": "k_max must be at least 1"}), 400
+            if max_iterations < 1 or num_threads < 1:
+                return jsonify({"error": "max_iterations and threads must be positive"}), 400
+        except (ValueError, TypeError):
+            return jsonify({"error": "k_max, max_iterations, and threads must be integers"}), 400
+
+        input_file = os.path.join(UPLOAD_FOLDER, filename)
+        if not os.path.exists(input_file):
+            return jsonify({"error": f"File not found: {filename}"}), 404
+
+        filename_base = os.path.splitext(filename)[0]
+        numeric_input = os.path.join(UPLOAD_FOLDER, f"{filename_base}_kmeans_numeric.csv")
+        build_result = build_clustering_csv(input_file, numeric_input, clustering_columns)
+        if not build_result['success']:
+            return jsonify({"error": build_result['error']}), 400
+
+        try:
+            with open(numeric_input, 'r', encoding='utf-8') as nf:
+                row_count = max(0, sum(1 for _ in nf) - 1)
+        except OSError:
+            row_count = 0
+
+        if row_count < 1:
+            try:
+                os.remove(numeric_input)
+            except OSError:
+                pass
+            return jsonify({"error": "No data rows in clustering CSV"}), 400
+
+        k_max_eff = min(k_max, row_count)
+        if k_max_eff < 1:
+            try:
+                os.remove(numeric_input)
+            except OSError:
+                pass
+            return jsonify({"error": "Not enough points for elbow curve"}), 400
+
+        elbow_out = get_elbow_output_path(filename_base)
+        try:
+            exec_result = kmeans_runner.run_elbow(
+                numeric_input,
+                elbow_out,
+                k_max_eff,
+                max_iterations,
+                num_threads,
+            )
+        finally:
+            try:
+                os.remove(numeric_input)
+            except OSError:
+                pass
+
+        if not exec_result['success']:
+            return jsonify({"error": exec_result['error']}), 500
+
+        try:
+            with open(elbow_out, 'r', encoding='utf-8') as ef:
+                payload = json.load(ef)
+        except (OSError, json.JSONDecodeError) as exc:
+            return jsonify({"error": f"Invalid elbow output: {exc}"}), 500
+        finally:
+            try:
+                os.remove(elbow_out)
+            except OSError:
+                pass
+
+        curve = payload.get('curve')
+        if not isinstance(curve, list):
+            return jsonify({"error": "Elbow output missing curve"}), 500
+
+        return jsonify({"success": True, "data": {"curve": curve, "k_max": k_max_eff}}), 200
+
+    except Exception as e:
+        return jsonify({"error": f"Elbow failed: {str(e)}"}), 500
 
 
 @cluster_bp.route('/results/<filename>', methods=['GET'])

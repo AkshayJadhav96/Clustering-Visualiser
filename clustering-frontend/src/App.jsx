@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import Header from './components/Header';
 import ControlPanel from './components/ControlPanel';
 import Visualization from './components/Visualization';
+import ElbowChart from './components/ElbowChart';
 import AnimationControls from './components/AnimationControls';
 import { useClusterApi } from './hooks/useClusterApi';
 import { analyzeClusteringCsv, subsetNumericColumns } from './utils/csv';
@@ -9,16 +10,20 @@ import { analyzeClusteringCsv, subsetNumericColumns } from './utils/csv';
 const ANIM_MS = 550;
 
 function App() {
-  const { loading, error, upload, run, clearError } = useClusterApi();
+  const { loading, error, upload, run, runElbow, clearError } = useClusterApi();
   const [uploadMeta, setUploadMeta] = useState(null);
   const [filename, setFilename] = useState(null);
   const [csvAnalysis, setCsvAnalysis] = useState(null);
   const [selectedClusteringColumns, setSelectedClusteringColumns] = useState([]);
+  const [kClusters, setKClusters] = useState(3);
+  const [elbowCurve, setElbowCurve] = useState(null);
   const [result, setResult] = useState(null);
   const [step, setStep] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [localError, setLocalError] = useState(null);
+
+  const clusteringKey = useMemo(() => selectedClusteringColumns.join('\0'), [selectedClusteringColumns]);
 
   const dataset = useMemo(() => {
     if (!csvAnalysis?.availableNumericHeaders?.length) {
@@ -39,6 +44,16 @@ function App() {
     setStep(0);
     setIsPlaying(false);
   }, [selectedClusteringColumns]);
+
+  useEffect(() => {
+    setElbowCurve(null);
+  }, [filename, clusteringKey]);
+
+  useEffect(() => {
+    if (!elbowCurve?.length) return;
+    const maxK = Math.max(...elbowCurve.map((p) => p.k));
+    setKClusters((prev) => (prev > maxK ? maxK : prev));
+  }, [elbowCurve]);
 
   useEffect(() => {
     if (!isPlaying || !result?.history?.length) return;
@@ -83,6 +98,7 @@ function App() {
       clearError();
       setLocalError(null);
       setResult(null);
+      setElbowCurve(null);
       setStep(0);
       setIsPlaying(false);
 
@@ -119,8 +135,44 @@ function App() {
       setSelectedClusteringColumns(analysis.availableNumericHeaders.slice());
       setUploadMeta(meta);
       setFilename(meta.filename);
+      setKClusters(3);
     },
     [upload, clearError],
+  );
+
+  const onRunElbow = useCallback(
+    async (opts) => {
+      if (!filename) return;
+      clearError();
+      setLocalError(null);
+      setResult(null);
+      setIsPlaying(false);
+      setStep(0);
+
+      if (selectedClusteringColumns.length < 2) {
+        setLocalError('Select at least two columns for clustering.');
+        return;
+      }
+
+      const res = await runElbow({
+        filename,
+        clustering_columns: selectedClusteringColumns,
+        k_max: opts.k_max,
+        max_iterations: opts.max_iterations,
+        threads: opts.threads,
+      });
+
+      if (!res?.success) return;
+
+      const curve = res.data?.curve;
+      if (!Array.isArray(curve) || !curve.length) {
+        setLocalError('Elbow response did not include a curve.');
+        return;
+      }
+
+      setElbowCurve(curve);
+    },
+    [filename, runElbow, clearError, selectedClusteringColumns],
   );
 
   const onRun = useCallback(
@@ -138,7 +190,7 @@ function App() {
       const payload = {
         filename,
         clustering_columns: selectedClusteringColumns,
-        k: params.k,
+        k: kClusters,
         max_iterations: params.max_iterations,
         threads: params.threads,
       };
@@ -162,7 +214,7 @@ function App() {
       setResult(data);
       setStep(0);
     },
-    [filename, run, clearError, dataset.rows.length, selectedClusteringColumns],
+    [filename, run, clearError, dataset.rows.length, selectedClusteringColumns, kClusters],
   );
 
   const history = result?.history ?? [];
@@ -179,6 +231,7 @@ function App() {
       <ControlPanel
         onFileSelected={onFileSelected}
         onRun={onRun}
+        onRunElbow={onRunElbow}
         loading={loading}
         canRun={canRun}
         error={displayError}
@@ -187,7 +240,11 @@ function App() {
         numericOptions={csvAnalysis?.availableNumericHeaders ?? []}
         selectedClusteringColumns={selectedClusteringColumns}
         onClusteringColumnsChange={setSelectedClusteringColumns}
+        kClusters={kClusters}
+        onKClustersChange={setKClusters}
       />
+
+      <ElbowChart curve={elbowCurve} selectedK={kClusters} onPickK={setKClusters} />
 
       <Visualization
         dataRows={dataset.rows}

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-const defaultParams = { k: 3, max_iterations: 100, threads: 4 };
+const defaultParams = { max_iterations: 100, threads: 4 };
 
 function pickCsvFile(list) {
   if (!list?.length) return null;
@@ -14,6 +14,7 @@ function pickCsvFile(list) {
 export default function ControlPanel({
   onFileSelected,
   onRun,
+  onRunElbow,
   loading,
   canRun,
   error,
@@ -22,9 +23,12 @@ export default function ControlPanel({
   numericOptions,
   selectedClusteringColumns,
   onClusteringColumnsChange,
+  kClusters,
+  onKClustersChange,
 }) {
   const [params, setParams] = useState(defaultParams);
   const [dragOver, setDragOver] = useState(false);
+  const [elbowKMax, setElbowKMax] = useState(10);
 
   const update = (key) => (e) => {
     const v = e.target.value;
@@ -33,7 +37,14 @@ export default function ControlPanel({
 
   const handleRun = () => {
     onRun({
-      k: Number(params.k) || 3,
+      max_iterations: Number(params.max_iterations) || 100,
+      threads: Number(params.threads) || 4,
+    });
+  };
+
+  const handleElbow = () => {
+    onRunElbow({
+      k_max: Math.max(2, Math.min(100, Number(elbowKMax) || 10)),
       max_iterations: Number(params.max_iterations) || 100,
       threads: Number(params.threads) || 4,
     });
@@ -62,8 +73,8 @@ export default function ControlPanel({
           <h2 className="kv-section-label">Dataset</h2>
           <p className="kv-section-hint">
             Upload a CSV with a header row. Choose which <strong>numeric</strong> columns k-means should use
-            (non-numeric columns are hidden here). The chart below still lets you pick any two of those
-            columns for the 2D view.
+            (non-numeric columns are hidden here). Run the elbow curve to pick k, then run K-means for the
+            animated map.
           </p>
           <label
             className={`kv-dropzone${dragOver ? ' kv-dropzone--active' : ''}`}
@@ -146,15 +157,18 @@ export default function ControlPanel({
 
         <div>
           <h2 className="kv-section-label">Parameters</h2>
-          <p className="kv-section-hint">Tune the engine, then launch a run.</p>
+          <p className="kv-section-hint">Elbow scan and K-means share max iterations and thread count.</p>
           <div className="kv-fields">
             <label>
               k (clusters)
               <input
                 type="number"
                 min={1}
-                value={params.k}
-                onChange={update('k')}
+                value={kClusters}
+                onChange={(e) => {
+                  const v = e.target.value === '' ? 1 : Number(e.target.value);
+                  onKClustersChange(Number.isFinite(v) && v >= 1 ? v : 1);
+                }}
                 disabled={loading}
               />
             </label>
@@ -179,6 +193,32 @@ export default function ControlPanel({
               />
             </label>
           </div>
+
+          <div className="kv-elbow-actions">
+            <label className="kv-elbow-kmax">
+              Elbow: max k
+              <input
+                type="number"
+                min={2}
+                max={100}
+                value={elbowKMax}
+                onChange={(e) => {
+                  const v = e.target.value === '' ? 2 : Number(e.target.value);
+                  setElbowKMax(Number.isFinite(v) ? Math.max(2, Math.min(100, v)) : 10);
+                }}
+                disabled={loading}
+              />
+            </label>
+            <button
+              type="button"
+              className="kv-btn-elbow"
+              onClick={handleElbow}
+              disabled={loading || !canRun}
+            >
+              {loading ? 'Working…' : 'Compute elbow curve'}
+            </button>
+          </div>
+
           <button type="button" className="kv-btn-run" onClick={handleRun} disabled={loading || !canRun}>
             {loading ? 'Running…' : 'Run K-Means'}
           </button>

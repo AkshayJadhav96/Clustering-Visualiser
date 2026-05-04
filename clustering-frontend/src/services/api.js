@@ -35,4 +35,13 @@ export const clusterApi = {
       return { ok: false, error: apiErrorMessage(err) };
     }
   },
+
+  elbow: async (payload) => {
+    try {
+      const { data } = await axios.post(`${API_BASE}/elbow`, payload);
+      return { ok: true, data };
+    } catch (err) {
+      return { ok: false, error: apiErrorMessage(err) };
+    }
+  },
 };

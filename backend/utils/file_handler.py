@@ -68,6 +68,11 @@ def get_output_path(filename_base):
     return os.path.join(OUTPUT_FOLDER, f"{filename_base}_output.json")
 
 
+def get_elbow_output_path(filename_base):
+    """JSON path for elbow (WCSS vs k) curve."""
+    return os.path.join(OUTPUT_FOLDER, f"{filename_base}_elbow.json")
+
+
 def read_json_output(filepath):
     """
     Read clustering results from JSON output file
