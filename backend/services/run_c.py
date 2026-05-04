@@ -11,8 +11,8 @@ class KMeansRunner:
 
         project_root = base_dir.parent.parent       # go to root
 
-        self.executable_path = project_root / "c_core" / "src" / "kmeans"
-        self.elbow_executable_path = project_root / "c_core" / "src" / "elbow"
+        self.executable_path = project_root / "c_core" / "bin" / "kmeans"
+        self.elbow_executable_path = project_root / "c_core" / "bin" / "elbow"
         
     def run_clustering(self, input_file, output_file, k=3, max_iterations=100, num_threads=4):
         """

@@ -1,6 +1,8 @@
 #ifndef IO_H
 #define IO_H
 
+#include <stdio.h>
+
 typedef struct {
     int n_points;
     int dim;
